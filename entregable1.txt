@@ -1,0 +1,95 @@
+# Paquetes necesarios
+install.packages(c("dplyr", "ggplot2", "caret", "data.table"))
+
+# Cargar las librerías
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(data.table)
+
+# Cargar los datos desde un archivo CSV
+datos <- fread("D:/tarea2/data.csv") #Ingrese la ruta correcta 
+head(datos)  # Mostrar las primeras filas 
+
+# Revisión de valores faltantes en cada columna
+sapply(datos, function(x) sum(is.na(x)))  # Contar valores NA por columna
+
+# Reemplazar valores faltantes en columnas numéricas con la media de cada columna
+datos <- datos %>%
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), mean(., na.rm = TRUE), .)))
+
+# Verificar que no queden valores faltantes
+sapply(datos, function(x) sum(is.na(x)))
+head(datos)  # Revisar las primeras filas tras manejar los NA
+
+# Eliminar duplicados
+sum(duplicated(datos))  # Contar registros duplicados
+datos <- datos %>% distinct()
+head(datos)  # Revisar datos sin duplicados
+
+# Exploración inicial: resumen de los datos y estructura de las columnas
+summary(datos)
+str(datos)
+
+# Graficar la distribución de los precios de las propiedades
+ggplot(datos, aes(x = precio)) +
+  geom_histogram(bins = 30, fill = "blue", color = "black") +
+  labs(title = "Distribución de precios de propiedades", x = "Precio", y = "Frecuencia")
+
+# Graficar la relación entre el tamaño de la propiedad y el precio
+ggplot(datos, aes(x = tamano, y = precio)) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Relación entre tamaño y precio de la propiedad", x = "Tamaño (m²)", y = "Precio")
+
+# Relación entre el número de habitaciones y el precio
+ggplot(datos, aes(x = factor(habitaciones), y = precio)) +
+  geom_boxplot() +
+  labs(title = "Relación entre número de habitaciones y precio", x = "Número de habitaciones", y = "Precio")
+
+# Codificación de variables categóricas (en este ejemplo, el estado de la propiedad)
+datos$estado <- as.factor(datos$estado)  # Convertir en factor
+datos <- datos %>%
+  mutate(estado_codificado = as.numeric(estado))  # Crear columna codificada
+head(datos)  # Revisar los cambios
+levels(datos$estado)  # Revisar niveles de la variable de estado
+unique(datos$estado_codificado)  # Revisar valores únicos de la codificación
+
+# Calcular la distancia de cada propiedad a un centro de referencia (p. ej., centro de la ciudad)
+centro_lat <- mean(datos$latitud, na.rm = TRUE)
+centro_long <- mean(datos$longitud, na.rm = TRUE)
+datos <- datos %>%
+  mutate(distancia_centro = sqrt((latitud - centro_lat)^2 + (longitud - centro_long)^2))
+
+# Resumen y visualización de la distancia al centro
+summary(datos$distancia_centro)
+ggplot(datos, aes(x = distancia_centro)) +
+  geom_histogram(binwidth = 0.1) +
+  labs(title = "Distribución de distancia al centro", x = "Distancia", y = "Frecuencia")
+
+# Dividir los datos en conjunto de entrenamiento (80%) y de prueba (20%) para modelado
+set.seed(123)  # Asegurar reproducibilidad
+indice <- createDataPartition(datos$precio, p = 0.8, list = FALSE)
+datos_entrenamiento <- datos[indice, ]
+datos_prueba <- datos[-indice, ]
+
+# Confirmación de la división
+dim(datos_entrenamiento)  # Dimensiones del conjunto de entrenamiento
+dim(datos_prueba)         # Dimensiones del conjunto de prueba
+
+# Confirmación adicional de que la suma de ambos conjuntos da el total de datos originales
+nrow(datos_entrenamiento) + nrow(datos_prueba) == nrow(datos)  # Debería ser TRUE
+
+# Visualizar la distribución de precios en ambos conjuntos
+ggplot() +
+  geom_density(data = datos_entrenamiento, aes(x = precio, fill = "Entrenamiento"), alpha = 0.5) +
+  geom_density(data = datos_prueba, aes(x = precio, fill = "Prueba"), alpha = 0.5) +
+  labs(title = "Distribución de precios en conjuntos de entrenamiento y prueba", x = "Precio", y = "Densidad") +
+  scale_fill_manual(values = c("Entrenamiento" = "blue", "Prueba" = "red"))
+
+# Confirmar que no haya duplicados en los conjuntos de entrenamiento y prueba
+sum(duplicated(datos_entrenamiento))  # Debería ser 0
+sum(duplicated(datos_prueba))         # Debería ser 0
+
+# Confirmar el tamaño de cada conjunto tras la división
+nrow(datos_entrenamiento)  # Debería ser 80% del total
+nrow(datos_prueba)         # Debería ser 20% del total
